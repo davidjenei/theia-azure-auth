@@ -17,16 +17,19 @@ services:
     ports:
      - 80:80
      - 443:443
+    environment:
+      - NGINX_HOST=${HOSTNAME}
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/general.conf:/etc/nginx/general.conf:ro
       - ./nginx/security.conf:/etc/nginx/security.conf:ro
       - ./nginx/letsencrypt.conf:/etc/nginx/letsencrypt.conf:ro
       - ./nginx/proxy.conf:/etc/nginx/proxy.conf:ro
-      - ./nginx/${HOSTNAME}:/etc/nginx/sites-enabled/${HOSTNAME}:ro
+      - ./nginx/theia.template:/etc/nginx/theia.template:ro
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled
       - ./data/certbot/conf:/etc/letsencrypt
       - ./data/certbot/www:/var/www/certbot
-    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    command: /bin/sh -c "envsubst '$${NGINX_HOST}' < /etc/nginx/theia.template > /etc/nginx/sites-enabled/${HOSTNAME}.conf && while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\""
     depends_on:
       - oauth
       - certbot
