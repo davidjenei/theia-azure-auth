@@ -1,0 +1,56 @@
+version: '3'
+
+services:
+  theia:
+   build: ./theia
+   volumes:
+     - ./theia/plugins:/plugins
+     - ./workspace-theia:/home/project:cached
+   environment:
+     - THEIA_WEBVIEW_EXTERNAL_ENDPOINT={{hostname}}
+   command:
+     - "--plugins=local-dir:/plugins"
+   restart: unless-stopped
+        
+  nginx:
+    image: nginx:1.17.1-alpine
+    ports:
+     - 80:80
+     - 443:443
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/general.conf:/etc/nginx/general.conf:ro
+      - ./nginx/security.conf:/etc/nginx/security.conf:ro
+      - ./nginx/letsencrypt.conf:/etc/nginx/letsencrypt.conf:ro
+      - ./nginx/proxy.conf:/etc/nginx/proxy.conf:ro
+      - ./nginx/${HOSTNAME}:/etc/nginx/sites-enabled/${HOSTNAME}:ro
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    depends_on:
+      - oauth
+      - certbot
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
+
+  oauth:
+    image: quay.io/pusher/oauth2_proxy
+    command:
+      - "-provider=azure"
+      - "-azure-tenant=${OAUTH2_PROXY_AZURE_TENANT}"
+      - "-email-domain=*"
+      - "-redirect-url=https://${HOSTNAME}/oauth2/callback"
+      - "-http-address=0.0.0.0:4180"
+      - "-skip-provider-button"
+    environment:
+      - OAUTH2_PROXY_CLIENT_ID=${OAUTH2_PROXY_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_PROXY_CLIENT_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
+    restart: unless-stopped
